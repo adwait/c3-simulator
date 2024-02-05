@@ -1,0 +1,31 @@
+
+run-python-file scripts/rerun.py
+
+script-branch {
+
+	local $src_full_path = (lookup-file "%simics%/"+ $src_path + "/" + $src_file)
+	echo "  Recopying src file %s to /home/simics" % [$src_full_path]
+	matic0.upload $src_full_path "/home/simics/"
+	matic0.wait-for-job
+
+	@recompile(simenv.src_file)
+	
+	@command_to_console("cp " + simenv.workload_name + " " + simenv.workload_name + "_orig")
+	if $unwinder == "default_unwinder" {
+		@command_to_console("patchelf --set-interpreter /home/simics/glibc/glibc-2.30_install/lib/ld-2.30.so --set-rpath /home/simics/glibc/glibc-2.30_install/lib " + simenv.workload_name)
+	} else {
+		@command_to_console("patchelf --set-interpreter " + simenv.glibc_dir + "/ld-2.30.so " + simenv.workload_name)
+		@command_to_console("patchelf --set-rpath " + simenv.glibc_dir + ":/home/simics/llvm/llvm_install/lib " + simenv.workload_name)
+		@command_to_console("patchelf --add-needed libunwind.so.1 " + simenv.workload_name)
+	}
+	#@command_to_console("patchelf --add-needed libm.so.6 " + simenv.workload_name)
+	@command_to_console("ln -nsf " + simenv.guest_lib64_dir + "/libgtest.a " + simenv.glibc_dir)
+	@command_to_console("ln -nsf " + simenv.guest_lib64_dir + "/libgomp.so.1 " + simenv.glibc_dir)
+	@command_to_console("mkdir -p /home/simics/glibc/glibc-2.30_install/share/zoneinfo")
+	@command_to_console("ln -nsf /usr/share/zoneinfo/UTC /home/simics/glibc/glibc-2.30_install/share/zoneinfo/UTC")
+	
+	
+	@rerun()
+
+	stop
+}

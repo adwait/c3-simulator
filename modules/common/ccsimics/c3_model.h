@@ -12,6 +12,14 @@
 #include "ccsimics/cc_encoding.h"
 #include "ccsimics/simics_util.h"
 
+#define SIM_INSTR_DEBUG 1
+#define SIM_fprintf(file, ...) do {         \
+        if (SIM_INSTR_DEBUG) {              \
+            fprintf (file, __VA_ARGS__);    \
+            fflush(file);                    \
+        }                                   \
+    } while (0)
+
 enum class RW { READ, WRITE };
 inline bool is_write(enum RW rw) { return rw == RW::WRITE; }
 
@@ -49,11 +57,16 @@ class C3Model {
     uint64 encoded_write_cnt_ = 0;
     uint64 total_addr_callback_cnt_ = 0;
 
+    // Simulation logging
+    FILE * trace_fh = fopen("sim.log", "a");
+
  public:
     C3Model(ConnectionTy *con, CtxTy *ctx, PtrEncTy *ptrenc)
         : con_(con), ctx_(ctx), ptrenc_(ptrenc) {}
 
-    virtual inline ~C3Model() = default;
+    virtual inline ~C3Model() {
+        fclose(trace_fh);
+    }
 
     /**
      * @brief Register callbacks for simulation
@@ -270,6 +283,9 @@ logical_address_t C3Model<ConnectionTy, CtxTy, PtrEncTy>::address_before(
             SIM_printf("address_before : 0x%016lx\n", (uint64_t)la);
         }
         logical_address_t la_decoded = this->decode_pointer(la);
+
+    SIM_fprintf(trace_fh, "CA: 0x%016lx, LA: 0x%016lx\n", (uint64_t)la, (uint64_t) la_decoded);
+
         if (is_canonical(la_decoded) != 0) {
             this->la_decoded_ = la_decoded;
             this->la_encoded_ = la;
@@ -419,6 +435,18 @@ void C3Model<ConnectionTy, CtxTy, PtrEncTy>::modify_data_on_mem_access(
         }
         SIM_printf("\n");
     }
+
+
+    SIM_fprintf(trace_fh, "bytes_orig (%lu) = ", bytes.size);
+    for (int i = bytes.size - 1; i >= 0; i--) {
+        SIM_fprintf(trace_fh, "%02x ", bytes.data[i]);
+    }
+    SIM_fprintf(trace_fh, ",");
+    SIM_fprintf(trace_fh, "bytes_mod  (%lu) = ", bytes.size);
+    for (int i = bytes_mod.size - 1; i >= 0; i--) {
+        SIM_fprintf(trace_fh, "%02x ", bytes_mod.data[i]);
+    }
+    SIM_fprintf(trace_fh, "\n");
 
     //  Handling Cross-Page Accesses
     if (this->is_crossing_page_second_) {
